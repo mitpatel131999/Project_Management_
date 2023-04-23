@@ -1,0 +1,468 @@
+<html>
+  <head>
+    <title>Ice Cream Picker</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
+    <script defer src="https://pyscript.net/latest/pyscript.js"></script>
+  </head>
+  <body>
+
+    <py-config>
+      packages = ["matplotlib", "pandas"]
+    </py-config>
+
+    <py-script>
+
+import sys
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from pyodide.http import open_url
+
+
+
+
+def printf(format, *args):
+    sys.stdout.write(format % args)
+
+
+
+def read_file(filename):
+    pathData = pd.read_csv(filename)
+    return pathData
+
+
+class Project:
+    activity = []
+    Predecessors = {}
+    Successors = {}
+    Duration = {}
+    ES = {}
+    ES_n = {}
+    EF = {}
+    EF_n = {}
+    LS = {}
+    LF = {}
+    Leg = {}
+    SLACK = {}
+
+    FF_S = {}
+    Critical_Path = {}
+    Critical_Path_LIST = [['m', 'i', 't']]
+
+    depth = {}
+
+
+def FS(prj, forward, a, b, t):
+    if forward == 1:
+        return prj.ES[a] + int(t) + prj.Duration[a]
+    else:
+        return prj.LS[b] - int(t) - prj.Duration[a]
+
+
+def tream(str):
+    ans = ""
+    for i in str:
+        if i == '$' or i == ' ' or i == ',':
+            continue
+        ans += i
+    return float(ans)
+
+
+def initilize_data(prj, rows):
+    for i in range(len(rows['Activity'])):
+        prj.activity.append(rows['Activity'][i])
+
+        #print( rows['Buffer'][i],'--',str(rows['Predecessors'][i]),'====',type(rows['Buffer'][i]))
+        #if np.nan(rows['Buffer'][i]) == True :
+        if float(rows['Buffer'][i]) != float(rows['Buffer'][i]):
+            prj.Leg[rows['Activity'][i]] = 0
+        else:
+            prj.Leg[rows['Activity'][i]] = float(rows['Buffer'][i])
+
+        prj.Duration[rows['Activity'][i]] = float(rows['Duration'][i])
+
+        #if np.nan(rows['Predecessors'][i]) :
+        if rows['Predecessors'][i] != rows['Predecessors'][i]:
+            #print('Hi')
+            rows['Predecessors'][i] = ""
+
+        if  rows['Predecessors'][i] == '' or rows['Predecessors'][i] == "NONE" or rows['Predecessors'][i] == "None" or rows['Predecessors'][i] == "none" or rows['Predecessors'][i] == "---":
+            prj.Predecessors[rows['Activity'][i]] = []
+            continue
+        tamp_list = []
+        if str(rows['Predecessors'][i])=="" or str(rows['Predecessors'][i])=="nan":
+             prj.Predecessors[rows['Activity'][i]] = tamp_list
+        for j in rows['Predecessors'][i]:
+             if j == ',' or j == ' ':
+                   continue
+             tamp_list.append([j, 'FS', '0'])
+
+        prj.Predecessors[rows['Activity'][i]] = tamp_list
+
+    for item in prj.activity:
+        for rel1 in prj.Predecessors[item]:
+            i = rel1[0]
+            if i not in prj.Successors:
+                prj.Successors[i] = list(item)
+            else:
+                prj.Successors[i].append(item)
+
+    for item in prj.activity:
+        if item not in prj.Successors:
+            prj.Successors[item] = []
+
+    #for item in prj.activity:
+    #    print(item,prj.Successors[item],prj.Predecessors[item],prj.Leg[item],prj.Duration[item]) 
+
+    for item in prj.activity:
+        prj.ES[item] = -1
+        prj.EF[item] = -1
+        prj.LS[item] = -1
+        prj.LF[item] = -1
+        prj.SLACK[item] = -1
+
+
+def forwardPass(prj):
+    total_activity = len(prj.activity)
+    done_activity = 0;
+    Done = {}
+    for item in prj.activity:
+        if len(prj.Predecessors[item]) == 0:
+            prj.ES[item] = 0 + prj.Leg[item]
+            prj.EF[item] = prj.Duration[item]
+            done_activity = done_activity + 1
+            Done[item] = 1
+        else:
+            Done[item] = -1
+
+    while done_activity < total_activity:
+
+        for item in prj.activity:
+            if Done[item] == 1:
+                continue
+            tamp_list = []
+            done_prececessors = 0
+            for rel in prj.Predecessors[item]:
+                i = rel[0]
+                if rel[1] == 'FS':
+                    EF_TAMP = FS(prj, 1, i, item, rel[2])
+
+                tamp_list.append(EF_TAMP)
+                if Done[i] == 1:
+                    done_prececessors = done_prececessors + 1
+            if done_prececessors == len(prj.Predecessors[item]):
+                prj.ES[item] = max(tamp_list) + prj.Leg[item]
+                prj.EF[item] = prj.ES[item] + prj.Duration[item]
+                Done[item] = 1
+                done_activity = done_activity + 1
+
+
+
+def max_EF(prj):
+    list = []
+    for item in prj.activity:
+        list.append(prj.EF[item])
+    return max(list)
+
+
+
+possible_combi = []
+
+def make_combination(i):
+    # if all list is considered then return empty list
+    if i == len(possible_combi):
+        return []
+    else:
+        list = make_combination(i + 1)
+        # Calculate all possible combination for next Critical path onwords
+        tamp_list = []
+
+        '''
+        below Code will append Activity(s) from current Critical path into combination list or above list
+        '''
+        for j in possible_combi[i]:
+            if len(list) != 0:
+                for it in list:
+                    it.append(j)
+                    ty = []
+                    for u in it:
+                        ty.append(u)
+                    tamp_list.append(ty)
+                    it.remove(j)
+            else:
+                # if list was empty then add this Activity in list
+                tamp_list.append([j])
+        # return all possible combination
+        return tamp_list
+
+
+TARGET_DURATION_N = 100
+Total_UNIT_N      = 10
+
+def calculate_duration(prj,team,Total_UNIT,TARGET_DURATION):
+    TEAM={}
+    for i in range(len(prj.activity)):
+        TEAM[prj.activity[i]] = team[i]
+
+    total_activity = len(prj.activity)
+    done_activity = 0
+    Done = {}
+    for item in prj.activity:
+        if len(prj.Predecessors[item]) == 0:
+            prj.ES[item] = 0 + prj.Leg[item]
+            prj.ES_n[item] = prj.ES[item] + (Total_UNIT - 1) * (prj.Duration[item] / TEAM[item])
+            prj.EF[item] = prj.Duration[item]
+            prj.EF_n[item] = prj.EF[item] + (Total_UNIT - 1) * (prj.Duration[item] / TEAM[item])
+
+            done_activity = done_activity + 1
+            Done[item] = 1
+        else:
+            Done[item] = -1
+
+    while done_activity < total_activity:
+
+        for item in prj.activity:
+            if Done[item] == 1:
+                continue
+            tamp_list = []
+            done_prececessors = 0
+            for rel in prj.Predecessors[item]:
+                i = rel[0]
+                if rel[1] == 'FS':
+                    delay = 0
+                    rate_pre = prj.Duration[i]/TEAM[i]
+                    rate_cur = prj.Duration[item]/TEAM[item]
+
+                    if rate_pre <= rate_cur :
+                        delay = 0
+                    else:
+                        delay = (rate_pre*(Total_UNIT-1))-(rate_cur*(Total_UNIT-1))
+                    EF_TAMP = FS(prj, 1, i, item, rel[2]) + delay
+
+                tamp_list.append(EF_TAMP)
+                if Done[i] == 1:
+                    done_prececessors = done_prececessors + 1
+            if done_prececessors == len(prj.Predecessors[item]):
+                prj.ES[item] = max(tamp_list) + prj.Leg[item]
+                prj.ES_n[item] = prj.ES[item] + (Total_UNIT-1)*(prj.Duration[item]/TEAM[item])
+                prj.EF[item] = prj.ES[item] + prj.Duration[item]
+                prj.EF_n[item] = prj.EF[item] + (Total_UNIT-1)*(prj.Duration[item]/TEAM[item])
+                Done[item] = 1
+                done_activity = done_activity + 1
+
+    list=[]
+    for item in prj.activity:
+        if len(prj.Successors[item]) == 0:
+            list.append([prj.EF_n[item],item,prj.Duration[item]/TEAM[item]])
+    return max(list)
+def to_2dec(a):
+    return int(100*a)/100
+
+def Print_SQUARE():
+    x_tick = []
+    y_tick = [0, Total_UNIT_N]
+    fig, ax = plt.subplots(num=None, figsize=(15, 10), dpi=60)
+    calculate_duration(prj, min(list_val)[2],Total_UNIT_N,TARGET_DURATION_N)
+    
+    for i in prj.activity:
+        x = [prj.ES[i], prj.ES_n[i], prj.ES_n[i] + prj.Duration[i], prj.ES[i] + prj.Duration[i], prj.ES[i]]
+        # corresponding y axis values
+        y = [0, Total_UNIT_N, Total_UNIT_N, 0, 0]
+        x_tick.append(prj.ES[i])
+        x_tick.append(prj.ES_n[i])
+        x_tick.append(prj.ES_n[i] + prj.Duration[i])
+        x_tick.append(prj.ES[i] + prj.Duration[i])
+        # plotting the points
+        ax.annotate(to_2dec(prj.ES[i]), xy=[prj.ES[i], 0], textcoords="offset points", xytext=(0, -50),
+                    bbox=dict(boxstyle="round", fc="lightgrey"), arrowprops=dict(arrowstyle="-"), fontsize=8)
+        ax.annotate(to_2dec(prj.ES[i] + prj.Duration[i]), xy=[prj.ES[i] + prj.Duration[i], 0],xytext=(0, -25),
+                    textcoords="offset points",
+                    bbox=dict(boxstyle="round", fc="lightgrey"), arrowprops=dict(arrowstyle="-"), fontsize=8)
+        ax.annotate(to_2dec(prj.ES_n[i]), xy=[prj.ES_n[i], Total_UNIT_N],  textcoords="offset points", xytext=(0, 25),
+                    bbox=dict(boxstyle="round", fc="lightgrey"), arrowprops=dict(arrowstyle="-"), fontsize=8)
+        ax.annotate(to_2dec(prj.ES_n[i] + prj.Duration[i]), xy=[prj.ES_n[i] + prj.Duration[i], Total_UNIT_N],
+                    textcoords="offset points", xytext=(0, 50),
+                    bbox=dict(boxstyle="round", fc="lightgrey"), arrowprops=dict(arrowstyle="-"), fontsize=8)
+
+        plt.plot(x, y, label=i)
+    
+    #print('hello')
+    #plt.rcParams["figure.figsize"] = (22,20)
+    plt.legend()
+    #plt.show()
+    display(plt, target="graph-area1", append=False)
+    plt.close()
+    
+
+new_val_total_unit = 0
+Y_optimize_unit = []
+
+def Print_Optimize_VS_Unit(team_new):
+    x_tick=[]
+    y_tick=[]
+    X=[]
+
+    for i in range(new_val_total_unit-5,new_val_total_unit+25,5):
+        team = calculate_team(i, TARGET_DURATION_N)
+        if len(team) == 0:
+            continue
+        ans = team
+        mx = ans[0]
+
+        Y_optimize_unit.append(mx)
+        X.append(i)
+        y_tick.append(mx)
+        x_tick.append(i)
+        plt.axhline(y=mx, color='b', linestyle=':')
+        plt.axvline(x=i, color='b', linestyle=':')
+    #plt.rcParams["figure.figsize"] = (22,20)
+    plt.plot(X,Y_optimize_unit)
+    plt.xticks(x_tick)
+    plt.yticks(y_tick)
+    plt.xlabel('Number of UNIT')
+    plt.ylabel('Optimized Duration')
+    plt.title('fixes Targeted Duration Optimistic Schedule')
+    #plt.show()
+    display(plt, target="graph-area2", append=False)
+    plt.close()
+    Total_UNIT_N = new_val_total_unit
+    calculate_duration(prj, team_new,Total_UNIT_N,TARGET_DURATION_N)
+
+new_val_total_duration = 0
+Y_optimize_duration = []
+
+def calculate_team(Total_UNIT,TARGET_DURATION):
+
+    forwardPass(prj)
+
+    CURRENT_TIME = max_EF(prj)
+    remind_time = TARGET_DURATION - CURRENT_TIME
+    team = {}
+    Rate = remind_time / (Total_UNIT - 1)
+    T = 0.01
+    list_val = []
+
+    rate = float(Rate)
+    if rate <= 0:
+        return []
+    while (True):
+        practical_team = []
+        for item in prj.activity:
+            team[item] = prj.Duration[item] / rate
+            practical_team.append(max(int(team[item]), 1))
+        answer_new = calculate_duration(prj, practical_team, Total_UNIT, TARGET_DURATION)
+        new_rate = answer_new[2]
+        if answer_new[0] <= TARGET_DURATION + 0.001:
+            list_val.append([abs(answer_new[0] - TARGET_DURATION), Rate - rate, practical_team, answer_new, new_rate])
+        rate -= T
+        if rate <= 0:
+            break
+
+    if len(list_val)==0:
+        return []
+    return min(list_val)[3]
+
+def Print_Optimize_VS_Duration(team_new):
+    x_tick = []
+    y_tick = []
+    X = []
+    prev_val=0
+    Y_optimize_unit.append(0)
+    for i in range(int(max_EF(prj)),TARGET_DURATION_N+50,1):
+        team = calculate_team(Total_UNIT_N,i)
+        if len(team) == 0:
+            continue
+        ans = team
+        mx = ans[0]
+
+        Y_optimize_duration.append(mx)
+        X.append(i)
+        if mx == prev_val:
+            continue
+        y_tick.append(mx)
+        x_tick.append(i)
+        plt.axvline(x=i, color='b', linestyle=':')
+        plt.axhline(y=mx, color='b', linestyle=':')
+        prev_val = mx
+    #plt.rcParams["figure.figsize"] = (22,20)
+    plt.plot(X,Y_optimize_duration)
+    plt.xticks(x_tick)
+    plt.yticks(y_tick)
+    plt.xlabel('Targated Duration')
+    plt.ylabel('Optimized Duration')
+    plt.title('fixes Unit Optimistic Schedule')
+    #plt.show()
+    display(plt, target="graph-area3", append=False)
+    plt.close()
+    calculate_duration(prj, team_new, Total_UNIT_N, TARGET_DURATION_N)
+
+
+if __name__ == '__main__':
+
+    #pathData = read_file("Assignment_5.csv")
+    url = ("https://raw.githubusercontent.com/mitpatel131999/Htmp/main/Assignment_5.csv")
+    pathData = pd.read_csv(open_url(url)) 
+    Total_UNIT_N = 10 #int(input(" Enter the number of UNIT := "))
+    TARGET_DURATION_N = 100 #int(input(" Enter the Targeted Duration := "))
+    prj = Project()
+    initilize_data(prj, pathData)
+    forwardPass(prj)
+    CURRENT_TIME = max_EF(prj)
+    remind_time = TARGET_DURATION_N - CURRENT_TIME
+    team ={}
+    Rate = remind_time/(Total_UNIT_N-1)
+    T = 0.01
+    list_val=[]
+    simulation=[]
+    rate = float(Rate)
+    while(True):
+        practical_team = []
+        for item in prj.activity:
+            team[item] = prj.Duration[item] / rate
+            practical_team.append(max(int(team[item]),1))
+        answer = calculate_duration(prj,practical_team,Total_UNIT_N,TARGET_DURATION_N)
+        new_rate = answer[2]
+        if answer[0] <= TARGET_DURATION_N + 0.001:
+            list_val.append([abs(answer[0]-TARGET_DURATION_N),Rate-rate,practical_team,answer,new_rate])
+        rate -= T
+        if rate < 0:
+            break
+    new_val_total_unit = Total_UNIT_N
+    team_new = min(list_val)[2]
+    answer = min(list_val)
+    print(answer)
+    print('Optimize Project Duration',answer[3][0],'| Distance from Targeted Duration ',answer[0])
+    print('optimized Producion rate ',int(1000*(Rate-answer[1]))/1000)
+    Print_SQUARE()
+    Print_Optimize_VS_Unit(team_new)
+    Print_Optimize_VS_Duration(team_new)
+'''
+    plot(ice_data)
+
+def plot(data):
+        plt.rcParams["figure.figsize"] = (22,20)
+        #fig, ax = plt.subplots()
+        #bars = ax.barh(data["name"], data["rating"], height=0.7)
+        #ax.bar_label(bars)
+        #plt.title("Rating of ice cream flavours of your choice")
+        display(fig, target="graph-area", append=False)
+'''
+
+
+
+
+
+
+
+  </py-script>
+
+
+   <div id="graph-area1"></div><br>
+   <div id="graph-area2"></div><br>
+   <div id="graph-area3"></div><br>
+
+ 
+
+  </body>
+</html>

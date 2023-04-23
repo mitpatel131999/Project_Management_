@@ -1,0 +1,11 @@
+﻿Activity,Predecessors,Duration,Buffer
+A,"",3,
+B,A,8,1
+C,B,3,2
+D,B,12,2
+E,"C,D",5,1
+F,B,4,2
+G,"C,E",10,1
+H,"D,F",3,2
+I,"G,H",12,2
+K,I,5,1
